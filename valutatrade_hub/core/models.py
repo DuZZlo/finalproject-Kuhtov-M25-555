@@ -4,6 +4,7 @@ from typing import Optional
 import time
 from typing import Dict, Optional
 from valutatrade_hub.core.utils import get_exchange_rate, get_available_currencies
+from valutatrade_hub.core.exceptions import InsufficientFundsError
 
 class User:
 
@@ -154,13 +155,12 @@ class Wallet:
     
     def withdraw(self, amount: float) -> float:
         if amount <= 0:
-            raise ValueError("Сумма снятия должна быть положительной")
-        
+        raise ValueError("Сумма снятия должна быть положительной")
+    
         if amount > self.balance:
-            raise ValueError(f"Недостаточно средств. Доступно: {self.balance:.2f}, запрошено: {amount:.2f}")
-
+            raise InsufficientFundsError(self.currency_code, self.balance, amount)
+        
         self.balance -= amount
-        print(f"Кошелёк {self.currency_code}: снято {amount:.2f}. Новый баланс: {self.balance:.2f}")
         return amount
     
     def get_balance_info(self) -> dict:

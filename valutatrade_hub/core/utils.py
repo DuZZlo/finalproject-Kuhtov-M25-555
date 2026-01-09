@@ -3,6 +3,9 @@ import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 from pathlib import Path
+from valutatrade_hub.core.currencies import CurrencyRegistry, CurrencyNotFoundError
+from valutatrade_hub.infra.settings import SettingsLoader
+from valutatrade_hub.infra.database import DatabaseManager
 
 def get_exchange_rate(from_currency: str, to_currency: str) -> Optional[float]:
     from_currency = from_currency.upper()
@@ -11,6 +14,12 @@ def get_exchange_rate(from_currency: str, to_currency: str) -> Optional[float]:
     if from_currency == to_currency:
         return 1.0
     
+    try:
+        CurrencyRegistry.get_currency(from_currency)
+        CurrencyRegistry.get_currency(to_currency)
+    except CurrencyNotFoundError:
+        return None
+
     rates = {
         "USD": 1.0,      
         "EUR": 1.17,      
@@ -23,47 +32,22 @@ def get_exchange_rate(from_currency: str, to_currency: str) -> Optional[float]:
     }
     
     if from_currency in rates and to_currency in rates:
-        rate_from = rates[from_currency]
-        rate_to = rates[to_currency]
-        return rate_to / rate_from
+        rate_from_usd = rates[from_currency]
+        rate_to_usd = rates[to_currency]
+        
+        return rate_to_usd / rate_from_usd
     
     return None
-
-def load_json(file_path: str) -> Any:
-    try:
-        if os.path.exists(file_path):
-            with open(file_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
-        print(f"Ошибка при загрузке {file_path}: {e}")
-    
-    if "users" in file_path:
-        return []
-    elif "portfolios" in file_path:
-        return []
-    elif "rates" in file_path:
-        return {"source": "stub", "last_refresh": ""}
-    return {}
-
-def save_json(data: Any, file_path: str) -> bool:
-    try:
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False, default=str)
-        return True
-    except (IOError, TypeError) as e:
-        print(f"Ошибка при сохранении {file_path}: {e}")
-        return False
 
 def get_available_currencies() -> list:
     return ["USD", "EUR", "GBP", "JPY", "CNY", "BTC", "ETH", "RUB"]
 
 def validate_currency(currency_code: str) -> bool:
-    if not currency_code or not isinstance(currency_code, str):
+    try:
+        CurrencyRegistry.get_currency(currency_code)
+        return True
+    except CurrencyNotFoundError:
         return False
-    
-    currency_code = currency_code.upper().strip()
-    return currency_code in get_available_currencies()
 
 def validate_amount(amount: Any) -> bool:
     try:

@@ -12,6 +12,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.12"
+toml = "^0.10.2"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.4.4"
@@ -31,6 +32,20 @@ ignore = []
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.valutatrade]
+# Настройки приложения
+data_dir = "data"
+logs_dir = "logs"
+default_base_currency = "USD"
+rates_ttl_seconds = 300
+log_level = "INFO"
+log_format = "text"
+max_log_file_size_mb = 10
+max_log_files = 5
+enable_rate_cache = true
+api_timeout_seconds = 10
+fake_api_mode = true
 
 [build-system]
 requires = ["poetry-core"]
