@@ -8,6 +8,9 @@ from valutatrade_hub.infra.settings import SettingsLoader
 
 
 def setup_logging():
+    """
+    Настраивает систему логирования для приложени
+    """
     settings = SettingsLoader()
 
     logs_dir = settings.logs_dir
@@ -52,8 +55,13 @@ def setup_logging():
 
 
 class JsonFormatter(logging.Formatter):
-
+    """
+    Форматтер для JSON логов
+    """
     def format(self, record):
+        """
+        Форматирует запись лога в JSON
+        """
         log_record = {
             "timestamp": datetime.fromtimestamp(record.created).isoformat(),
             "level": record.levelname,
@@ -90,4 +98,7 @@ class JsonFormatter(logging.Formatter):
 
 
 def get_logger(name: str = "valutatrade") -> logging.Logger:
+    """
+    Возвращает логгер с заданным именем
+    """
     return logging.getLogger(name)

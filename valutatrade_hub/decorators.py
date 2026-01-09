@@ -7,6 +7,9 @@ from valutatrade_hub.logging_config import get_logger
 
 
 def log_action(action_name: str | None = None, verbose: bool = False):
+    """
+    Декоратор для логирования действий пользователя
+    """
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -89,6 +92,9 @@ def log_action(action_name: str | None = None, verbose: bool = False):
 
 
 def retry_on_failure(max_retries: int = 3, delay: float = 1.0):
+    """
+    Декоратор для повторных попыток при сбоях
+    """
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -118,6 +124,9 @@ def retry_on_failure(max_retries: int = 3, delay: float = 1.0):
 
 
 def validate_input(*validators: Callable):
+    """
+    Декоратор для валидации входных параметров
+    """
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -133,6 +142,9 @@ def validate_input(*validators: Callable):
 
 
 def cache_result(ttl_seconds: int = 300):
+    """
+    Декоратор для кеширования результатов функций
+    """
     def decorator(func: Callable) -> Callable:
         cache = {}
         cache_timestamps = {}

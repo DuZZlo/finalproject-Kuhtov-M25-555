@@ -24,35 +24,54 @@ from valutatrade_hub.infra.settings import SettingsLoader
 
 
 class SessionManager:
-
+    """
+    Менеджер сессий для хранения текущего пользователя
+    """
     _current_user: User | None = None
 
     @classmethod
     def get_current_user(cls) -> User | None:
+        """
+        Возвращает текущего пользователя
+        """
         return cls._current_user
 
     @classmethod
     def set_current_user(cls, user: User | None) -> None:
+        """
+        Устанавливает текущего пользователя
+        """
         cls._current_user = user
 
     @classmethod
     def is_logged_in(cls) -> bool:
+        """
+        Проверяет, залогинен ли пользователь
+        """
         return cls._current_user is not None
 
     @classmethod
     def require_login(cls) -> None:
+        """
+        Проверяет авторизацию, выбрасывает исключение если не залогинен
+        """
         if not cls.is_logged_in():
             raise AuthenticationError("Сначала выполните команду login")
 
 
 class UserManager:
-
+    """
+    Менеджер пользователей
+    """
     _db = DatabaseManager()
     _settings = SettingsLoader()
 
     @staticmethod
     @log_action("REGISTER", verbose=True)
     def register(username: str, password: str) -> tuple[bool, str]:
+        """
+        Регистрирует нового пользователя
+        """
         if len(password) < 4:
             raise ValidationError("password", "Пароль должен быть не короче 4 символов")
 
@@ -83,6 +102,9 @@ class UserManager:
     @staticmethod
     @log_action("LOGIN", verbose=True)
     def login(username: str, password: str) -> tuple[bool, str, User | None]:
+        """
+        Авторизует пользователя
+        """
         user_data = UserManager.find_user_by_username(username)
         if not user_data:
             raise AuthenticationError(f"Пользователь '{username}' не найден")
@@ -99,6 +121,9 @@ class UserManager:
 
     @staticmethod
     def get_next_user_id() -> int:
+        """
+        Генерирует следующий ID пользователя
+        """
         users = UserManager._db.read_collection("users")
         if not users:
             return 1
@@ -106,16 +131,24 @@ class UserManager:
 
     @staticmethod
     def find_user_by_username(username: str) -> dict | None:
+        """
+        Находит пользователя по имени
+        """
         return UserManager._db.find_one("users", {"username": username})
 
 
 class PortfolioManager:
-
+    """
+    Менеджер портфелей
+    """
     _db = DatabaseManager()
     _settings = SettingsLoader()
 
     @staticmethod
     def create_portfolio(user_id: int) -> bool:
+        """
+        Создаёт пустой портфель для пользователя
+        """
         portfolio_data = {
             "user_id": user_id,
             "wallets": {}
@@ -125,10 +158,16 @@ class PortfolioManager:
 
     @staticmethod
     def find_portfolio(user_id: int) -> dict | None:
+        """
+        Находит портфель пользователя
+        """
         return PortfolioManager._db.find_one("portfolios", {"user_id": user_id})
 
     @staticmethod
     def get_user_portfolio(user_id: int) -> Portfolio | None:
+        """
+        Загружает портфель пользователя
+        """
         portfolio_data = PortfolioManager.find_portfolio(user_id)
         if not portfolio_data:
             raise PortfolioNotFoundError(user_id)
@@ -137,6 +176,9 @@ class PortfolioManager:
 
     @staticmethod
     def save_portfolio(portfolio: Portfolio) -> bool:
+        """
+        Сохраняет портфель
+        """
         return PortfolioManager._db.update_one(
             "portfolios",
             {"user_id": portfolio.user_id},
@@ -146,6 +188,9 @@ class PortfolioManager:
     @staticmethod
     @log_action("SHOW_PORTFOLIO", verbose=False)
     def show_portfolio(user_id: int, base_currency: str = "USD") -> tuple[bool, str, dict[str, Any] | None]:
+        """
+        Показывает все кошельки и итоговую стоимость в базовой валюте
+        """
         try:
             CurrencyRegistry.get_currency(base_currency)
         except CurrencyNotFoundError:
@@ -226,13 +271,18 @@ class PortfolioManager:
 
 
 class TradeManager:
-
+    """
+    Менеджер торговых операций
+    """
     _db = DatabaseManager()
     _settings = SettingsLoader()
 
     @staticmethod
     @log_action("BUY", verbose=True)
     def buy(user_id: int, currency_code: str, amount: float) -> tuple[bool, str]:
+        """
+        Покупает валюту
+        """
         try:
             currency = CurrencyRegistry.get_currency(currency_code)
         except CurrencyNotFoundError as e:
@@ -289,6 +339,9 @@ class TradeManager:
     @staticmethod
     @log_action("SELL", verbose=True)
     def sell(user_id: int, currency_code: str, amount: float) -> tuple[bool, str]:
+        """
+        Продаёт валюту
+        """
         try:
             currency = CurrencyRegistry.get_currency(currency_code)
         except CurrencyNotFoundError as e:
@@ -346,9 +399,14 @@ class TradeManager:
 
 
 class RateManager:
-
+     """
+     Менеджер курсов, интегрированный с Parser Service
+     """
     @staticmethod
     def get_rate(from_currency: str, to_currency: str) -> tuple[bool, str, float | None]:
+        """
+        Получает курс валюты из кеша
+        """
         try:
             from_curr = CurrencyRegistry.get_currency(from_currency)
             to_curr = CurrencyRegistry.get_currency(to_currency)
@@ -381,6 +439,9 @@ class RateManager:
 
     @staticmethod
     def list_supported_currencies() -> str:
+        """
+        Возвращает список поддерживаемых валют
+        """
         currencies = CurrencyRegistry.get_all_currencies()
 
         fiat_currencies = []

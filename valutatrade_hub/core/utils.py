@@ -8,6 +8,9 @@ from valutatrade_hub.infra.settings import SettingsLoader
 
 
 def get_exchange_rate(from_currency: str, to_currency: str) -> float | None:
+    """
+    Получает курс обмена между валютами из локального кеша
+    """
     from_currency = from_currency.upper()
     to_currency = to_currency.upper()
 
@@ -60,6 +63,9 @@ def get_exchange_rate(from_currency: str, to_currency: str) -> float | None:
 
 
 def validate_currency(currency_code: str) -> bool:
+    """
+    Проверяет валидность кода валюты через реестр
+    """
     try:
         CurrencyRegistry.get_currency(currency_code)
         return True
@@ -68,6 +74,9 @@ def validate_currency(currency_code: str) -> bool:
 
 
 def validate_amount(amount: Any) -> bool:
+    """
+    Проверяет валидность суммы
+    """
     try:
         amount_float = float(amount)
         return amount_float > 0
@@ -76,6 +85,9 @@ def validate_amount(amount: Any) -> bool:
 
 
 def is_cache_valid() -> bool:
+    """
+    Проверяет, является ли кеш курсов актуальным
+    """
     settings = SettingsLoader()
     rates_file = settings.get_data_file_path("rates.json")
 
@@ -99,6 +111,9 @@ def is_cache_valid() -> bool:
 
 
 def get_cache_info() -> dict[str, Any]:
+    """
+    Возвращает информацию о кеше курсов.
+    """
     settings = SettingsLoader()
     rates_file = settings.get_data_file_path("rates.json")
 

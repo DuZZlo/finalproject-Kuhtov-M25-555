@@ -10,18 +10,29 @@ logger = get_logger("parser.storage")
 
 
 class RatesStorage:
-
+    """
+    Класс для работы с хранилищем курсов валют
+    """
     def __init__(self, config: ParserConfig):
+        """
+        Инициализация хранилища
+        """
         self.config = config
         self._ensure_directories()
 
     def _ensure_directories(self) -> None:
+        """
+        Создает необходимые директории, если их нет
+        """
         os.makedirs(os.path.dirname(self.config.RATES_FILE_PATH), exist_ok=True)
         os.makedirs(os.path.dirname(self.config.HISTORY_FILE_PATH), exist_ok=True)
 
     def save_current_rates(self, rates: dict[str, float],
                           source: str,
                           metadata: dict | None = None) -> bool:
+        """
+        Сохраняет текущие курсы в rates.json
+        """
         try:
             current_time = datetime.now().isoformat()
 
@@ -58,6 +69,9 @@ class RatesStorage:
     def save_to_history(self, rates: dict[str, float],
                        source: str,
                        request_metadata: dict | None = None) -> bool:
+        """
+        Сохраняет курсы в историческое хранилище
+        """
         try:
             current_time = datetime.now()
             timestamp = current_time.isoformat()
@@ -97,6 +111,9 @@ class RatesStorage:
             return False
 
     def _load_history(self) -> list[dict[str, Any]]:
+        """
+        Загружает исторические данные
+        """
         try:
             if os.path.exists(self.config.HISTORY_FILE_PATH):
                 with open(self.config.HISTORY_FILE_PATH, encoding='utf-8') as f:
@@ -107,6 +124,9 @@ class RatesStorage:
         return []
 
     def load_current_rates(self) -> dict[str, Any] | None:
+        """
+        Загружает текущие курсы из кеша
+        """
         try:
             if os.path.exists(self.config.RATES_FILE_PATH):
                 with open(self.config.RATES_FILE_PATH, encoding='utf-8') as f:
@@ -117,6 +137,9 @@ class RatesStorage:
         return None
 
     def is_cache_valid(self) -> bool:
+        """
+        Проверяет, является ли кеш актуальным
+        """
         data = self.load_current_rates()
 
         if not data or "last_refresh" not in data:
@@ -133,6 +156,9 @@ class RatesStorage:
             return False
 
     def clear_cache(self) -> bool:
+        """
+        Очищает кеш курсов
+        """
         try:
             if os.path.exists(self.config.RATES_FILE_PATH):
                 os.remove(self.config.RATES_FILE_PATH)
@@ -144,6 +170,9 @@ class RatesStorage:
             return False
 
     def get_rate(self, from_currency: str, to_currency: str) -> float | None:
+        """
+        Получает курс из кеша
+        """
         data = self.load_current_rates()
 
         if not data or "pairs" not in data:

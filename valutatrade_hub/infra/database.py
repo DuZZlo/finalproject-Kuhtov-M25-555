@@ -10,7 +10,9 @@ T = TypeVar('T')
 
 
 class DatabaseManager(metaclass=type(SettingsLoader)):
-
+    """
+    Singleton для работы с JSON-хранилищем данных
+    """
     def __init__(self):
         self._settings = SettingsLoader()
         self._lock = threading.Lock()
@@ -20,6 +22,9 @@ class DatabaseManager(metaclass=type(SettingsLoader)):
         self._ensure_directories()
 
     def _ensure_directories(self) -> None:
+        """
+        Создает необходимые директории, если они не существуют
+        """
         data_dir = self._settings.data_dir
         logs_dir = self._settings.logs_dir
 
@@ -27,10 +32,16 @@ class DatabaseManager(metaclass=type(SettingsLoader)):
         os.makedirs(logs_dir, exist_ok=True)
 
     def _get_file_path(self, collection: str) -> str:
+        """
+        Возвращает путь к файлу коллекции
+        """
         filename = f"{collection}.json"
         return self._settings.get_data_file_path(filename)
 
     def _read_file(self, file_path: str) -> Any:
+        """
+        Читает данные из файла
+        """
         cache_key = file_path
 
         if cache_key in self._cache:
@@ -65,6 +76,9 @@ class DatabaseManager(metaclass=type(SettingsLoader)):
         return default_data
 
     def _write_file(self, file_path: str, data: Any) -> bool:
+        """
+        Записывает данные в файл
+        """
         try:
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
@@ -80,16 +94,25 @@ class DatabaseManager(metaclass=type(SettingsLoader)):
             return False
 
     def read_collection(self, collection: str) -> Any:
+        """
+        Читает данные из коллекции
+        """
         with self._lock:
             file_path = self._get_file_path(collection)
             return self._read_file(file_path)
 
     def write_collection(self, collection: str, data: Any) -> bool:
+        """
+        Записывает данные в коллекцию
+        """
         with self._lock:
             file_path = self._get_file_path(collection)
             return self._write_file(file_path, data)
 
     def find_one(self, collection: str, condition: dict[str, Any]) -> dict[str, Any] | None:
+        """
+        Находит один элемент в коллекции по условию
+        """
         data = self.read_collection(collection)
 
         if isinstance(data, list):
@@ -100,6 +123,9 @@ class DatabaseManager(metaclass=type(SettingsLoader)):
         return None
 
     def find_all(self, collection: str, condition: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        """
+        Находит все элементы в коллекции по условию
+        """
         data = self.read_collection(collection)
         results = []
 
@@ -111,6 +137,9 @@ class DatabaseManager(metaclass=type(SettingsLoader)):
         return results
 
     def insert_one(self, collection: str, item: dict[str, Any]) -> bool:
+        """
+        Вставляет один элемент в коллекцию
+        """
         data = self.read_collection(collection)
 
         if isinstance(data, list):
@@ -120,6 +149,9 @@ class DatabaseManager(metaclass=type(SettingsLoader)):
         return False
 
     def update_one(self, collection: str, condition: dict[str, Any], update: dict[str, Any]) -> bool:
+        """
+        Обновляет один элемент в коллекции
+        """
         data = self.read_collection(collection)
 
         if not isinstance(data, list):
@@ -133,6 +165,9 @@ class DatabaseManager(metaclass=type(SettingsLoader)):
         return False
 
     def delete_one(self, collection: str, condition: dict[str, Any]) -> bool:
+        """
+        Удаляет один элемент из коллекции
+        """
         data = self.read_collection(collection)
 
         if not isinstance(data, list):
@@ -146,6 +181,9 @@ class DatabaseManager(metaclass=type(SettingsLoader)):
         return False
 
     def clear_cache(self, collection: str | None = None) -> None:
+        """
+        Очищает кеш данных
+        """
         with self._lock:
             if collection:
                 file_path = self._get_file_path(collection)
@@ -157,6 +195,9 @@ class DatabaseManager(metaclass=type(SettingsLoader)):
                 self._cache_timestamps.clear()
 
     def is_cache_valid(self, collection: str, max_age_seconds: int = 60) -> bool:
+        """
+        Проверяет, является ли кеш данных актуальным
+        """
         file_path = self._get_file_path(collection)
 
         if file_path not in self._cache_timestamps:

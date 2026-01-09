@@ -17,12 +17,17 @@ from valutatrade_hub.infra.settings import SettingsLoader
 
 
 class ValutaTradeCLI:
-
+    """
+    Основной класс CLI интерфейса
+    """
     def __init__(self):
         self.parser = self._create_parser()
         self._settings = SettingsLoader()
 
     def _create_parser(self) -> argparse.ArgumentParser:
+        """
+        Создаёт парсер аргументов командной строки
+        """
         parser = argparse.ArgumentParser(
             prog="valutatrade",
             description="ValutaTrade Hub - Платформа для отслеживания и симуляции торговли валютами",
@@ -235,6 +240,9 @@ class ValutaTradeCLI:
         return parser
 
     def _check_login(self) -> bool:
+        """
+        Проверяет, залогинен ли пользователь
+        """
         try:
             SessionManager.require_login()
             return True
@@ -243,6 +251,9 @@ class ValutaTradeCLI:
             return False
 
     def handle_register(self, args) -> int:
+        """
+        Обрабатывает команду register
+        """
         try:
             success, message = UserManager.register(args.username, args.password)
             print(message)
@@ -255,6 +266,9 @@ class ValutaTradeCLI:
             return 1
 
     def handle_login(self, args) -> int:
+        """
+        Обрабатывает команду login
+        """
         try:
             success, message, user = UserManager.login(args.username, args.password)
             if success and user:
@@ -269,6 +283,9 @@ class ValutaTradeCLI:
             return 1
 
     def handle_show_portfolio(self, args) -> int:
+        """
+        Обрабатывает команду show_portfolio
+        """
         if not self._check_login():
             return 1
 
@@ -294,6 +311,9 @@ class ValutaTradeCLI:
             return 1
 
     def handle_buy(self, args) -> int:
+        """
+        Обрабатывает команду buy
+        """
         if not self._check_login():
             return 1
 
@@ -324,6 +344,9 @@ class ValutaTradeCLI:
             return 1
 
     def handle_sell(self, args) -> int:
+        """
+        Обрабатывает команду sell
+        """
         if not self._check_login():
             return 1
 
@@ -354,6 +377,9 @@ class ValutaTradeCLI:
             return 1
 
     def handle_get_rate(self, args) -> int:
+        """
+        Обрабатывает команду get-rate
+        """
         try:
             from_currency = args.from_currency.upper()
             to_currency = args.to_currency.upper()
@@ -367,6 +393,9 @@ class ValutaTradeCLI:
             return 1
 
     def handle_list_currencies(self, args) -> int:
+        """
+        Обрабатывает команду list-currencies
+        """
         try:
             message = RateManager.list_supported_currencies()
             print(message)
@@ -376,6 +405,9 @@ class ValutaTradeCLI:
             return 1
 
     def run(self, args=None) -> int:
+        """
+        Запускает CLI с переданными аргументами
+        """
         try:
             parsed_args = self.parser.parse_args(args)
 
@@ -411,6 +443,9 @@ class ValutaTradeCLI:
             return 1
 
     def handle_update_rates(self, args) -> int:
+        """
+        Обрабатывает команду update_rates
+        """
         try:
             from valutatrade_hub.parser_service.updater import RatesUpdater
 
@@ -451,6 +486,9 @@ class ValutaTradeCLI:
             return 1
 
     def handle_show_rates(self, args) -> int:
+        """
+        Обрабатывает команду show_rates
+        """
         try:
             from valutatrade_hub.parser_service.updater import RatesUpdater
 
@@ -536,6 +574,9 @@ class ValutaTradeCLI:
             return 1
 
     def handle_start_parser(self, args) -> int:
+        """
+        Обрабатывает команду start_parser
+        """
         try:
             from valutatrade_hub.parser_service.config import ParserConfig
             from valutatrade_hub.parser_service.scheduler import RatesScheduler
@@ -562,6 +603,9 @@ class ValutaTradeCLI:
             return 1
 
     def handle_stop_parser(self, args) -> int:
+        """
+        Обрабатывает команду stop_parser
+        """
         try:
             if hasattr(self, '_parser_scheduler') and self._parser_scheduler:
                 self._parser_scheduler.stop()
@@ -576,6 +620,9 @@ class ValutaTradeCLI:
             return 1
 
     def handle_parser_status(self, args) -> int:
+        """
+        Обрабатывает команду parser_status
+        """
         try:
             from valutatrade_hub.parser_service.updater import RatesUpdater
 

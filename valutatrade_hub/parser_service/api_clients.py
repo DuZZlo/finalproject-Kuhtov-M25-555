@@ -12,8 +12,13 @@ from valutatrade_hub.parser_service.config import ParserConfig
 logger = get_logger("parser.api")
 
 class BaseApiClient(ABC):
-
+    """
+    Базовый класс для API клиентов
+    """
     def __init__(self, config: ParserConfig):
+        """
+        Инициализация клиента
+        """
         self.config = config
         self.session = requests.Session()
         self.session.headers.update({
@@ -22,9 +27,15 @@ class BaseApiClient(ABC):
 
     @abstractmethod
     def fetch_rates(self) -> dict[str, float]:
+        """
+        Получает курсы валют от API
+        """
         pass
 
     def _make_request(self, url: str, params: dict | None = None) -> dict[str, Any]:
+        """
+        Выполняет HTTP запрос с обработкой ошибок
+        """
         try:
             logger.debug(f"Выполнение запроса к {url}")
             start_time = time.time()
@@ -73,9 +84,14 @@ class BaseApiClient(ABC):
 
 
 class CoinGeckoClient(BaseApiClient):
-
+    """
+    Клиент для работы с CoinGecko API
+    """
     @retry_on_failure(max_retries=3, delay=1.0)
     def fetch_rates(self) -> dict[str, float]:
+        """
+        Получает курсы криптовалют от CoinGecko
+        """
         logger.info("Запрос курсов криптовалют от CoinGecko...")
 
         url = self.config.coingecko_request_url
@@ -118,7 +134,9 @@ class CoinGeckoClient(BaseApiClient):
 
 
 class ExchangeRateApiClient(BaseApiClient):
-
+    """
+    Клиент для работы с ExchangeRate-API
+    """
     @retry_on_failure(max_retries=2, delay=2.0)
     def fetch_rates(self) -> dict[str, float]:
         logger.info("Запрос курсов фиатных валют от ExchangeRate-API...")

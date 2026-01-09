@@ -11,8 +11,13 @@ logger = get_logger("parser.updater")
 
 
 class RatesUpdater:
-
+    """
+    Класс для координации обновления курсов валют
+    """
     def __init__(self, config: ParserConfig | None = None):
+        """
+        Инициализация обновлятеля курсов
+        """
         self.config = config or ParserConfig()
         self.storage = RatesStorage(self.config)
 
@@ -25,6 +30,9 @@ class RatesUpdater:
                    f"крипто и {len(self.config.FIAT_CURRENCIES)} фиатных валют")
 
     def update_rates(self, source: str | None = None) -> dict[str, dict]:
+        """
+        Выполняет обновление курсов валют
+        """
         logger.info("Начало обновления курсов" + (f" из источника: {source}" if source else ""))
 
         start_time = time.time()
@@ -129,6 +137,9 @@ class RatesUpdater:
         return results
 
     def get_update_summary(self, results: dict) -> str:
+        """
+        Формирует сводку по обновлению
+        """
         if results["status"] == "error" and not results.get("total_rates", 0):
             return "Обновление не удалось. Не получено ни одного курса."
 
@@ -161,6 +172,9 @@ class RatesUpdater:
         return "\n".join(summary_lines)
 
     def check_rates_available(self) -> dict[str, bool]:
+        """
+        Проверяет доступность курсов в кеше
+        """
         data = self.storage.load_current_rates()
 
         if not data:

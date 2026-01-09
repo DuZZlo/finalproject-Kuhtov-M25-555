@@ -4,7 +4,9 @@ from dataclasses import dataclass
 
 @dataclass
 class ParserConfig:
-
+    """
+    Конфигурация для Parser Service
+    """
     EXCHANGERATE_API_KEY: str = "94274108c3fc10ee4505560e"
 
     COINGECKO_URL: str = "https://api.coingecko.com/api/v3/simple/price"
@@ -42,6 +44,9 @@ class ParserConfig:
     EXCHANGERATE_RATE_LIMIT: int = 1500  # запросов в день
 
     def __post_init__(self):
+        """
+        Дополнительная валидация после инициализации
+        """
         env_key = os.getenv("EXCHANGERATE_API_KEY")
         if env_key:
             self.EXCHANGERATE_API_KEY = env_key
@@ -52,6 +57,9 @@ class ParserConfig:
 
     @property
     def coingecko_request_url(self) -> str:
+        """
+        Возвращает URL для запроса к CoinGecko
+        """
         ids = [self.CRYPTO_ID_MAP[crypto] for crypto in self.CRYPTO_CURRENCIES]
         vs_currencies = self.BASE_CURRENCY.lower()
 
@@ -59,14 +67,23 @@ class ParserConfig:
 
     @property
     def exchangerate_request_url(self) -> str:
+        """
+        Возвращает URL для запроса к ExchangeRate-API
+        """
         return f"{self.EXCHANGERATE_API_URL}/{self.EXCHANGERATE_API_KEY}/latest/{self.BASE_CURRENCY}"
 
     def get_crypto_id(self, crypto_code: str) -> str:
+        """
+        Возвращает ID криптовалюты для CoinGecko
+        """
         if crypto_code not in self.CRYPTO_ID_MAP:
             raise ValueError(f"Неизвестная криптовалюта: {crypto_code}")
         return self.CRYPTO_ID_MAP[crypto_code]
 
     def get_all_currency_pairs(self) -> dict[str, str]:
+        """
+        Возвращает все отслеживаемые валютные пары
+        """
         pairs = {}
 
         # Криптовалюты к USD

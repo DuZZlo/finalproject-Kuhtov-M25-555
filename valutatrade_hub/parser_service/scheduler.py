@@ -10,8 +10,13 @@ logger = get_logger("parser.scheduler")
 
 
 class RatesScheduler:
-
+    """
+    Планировщик периодического обновления курсов
+    """
     def __init__(self, config: ParserConfig | None = None):
+        """
+        Инициализация планировщика
+        """
         self.config = config or ParserConfig()
         self.updater = RatesUpdater(self.config)
         self._stop_event = threading.Event()
@@ -20,6 +25,9 @@ class RatesScheduler:
         self._error_count = 0
 
     def start(self, run_immediately: bool = True) -> None:
+        """
+        Запускает планировщик в фоновом потоке
+        """
         if self._thread and self._thread.is_alive():
             logger.warning("Планировщик уже запущен")
             return
@@ -43,6 +51,9 @@ class RatesScheduler:
             initial_thread.start()
 
     def stop(self) -> None:
+        """
+        Останавливает планировщик
+        """
         if self._thread and self._thread.is_alive():
             logger.info("Остановка планировщика...")
             self._stop_event.set()
@@ -50,6 +61,9 @@ class RatesScheduler:
             logger.info("Планировщик остановлен")
 
     def _scheduler_loop(self) -> None:
+        """
+        Основной цикл планировщика
+        """
         logger.info("Цикл планировщика запущен")
 
         while not self._stop_event.is_set():
@@ -70,6 +84,9 @@ class RatesScheduler:
                 time.sleep(60)  # Ждем минуту при ошибке
 
     def _run_single_update(self) -> None:
+        """
+        Выполняет единичное обновление курсов
+        """
         try:
             logger.info(f"Запланированное обновление #{self._update_count + 1}")
 
@@ -87,9 +104,15 @@ class RatesScheduler:
             logger.error(f"Неожиданная ошибка при обновлении: {e}", exc_info=True)
 
     def run_once(self) -> dict:
+        """
+        Выполняет однократное обновление
+        """
         return self.updater.update_rates()
 
     def get_stats(self) -> dict:
+        """
+        Возвращает статистику работы планировщика
+        """
         return {
             "started": self._thread is not None and self._thread.is_alive(),
             "update_count": self._update_count,
