@@ -2,7 +2,7 @@ class ValutaTradeError(Exception):
     pass
 
 class InsufficientFundsError(ValutaTradeError):
-    
+
     def __init__(self, currency_code: str, available: float, required: float):
         self.currency_code = currency_code
         self.available = available
@@ -11,7 +11,7 @@ class InsufficientFundsError(ValutaTradeError):
         super().__init__(message)
 
 class CurrencyNotFoundError(ValutaTradeError):
-    
+
     def __init__(self, currency_code: str):
         self.currency_code = currency_code
         message = f"Неизвестная валюта '{currency_code}'"
@@ -27,13 +27,13 @@ class ApiRequestError(ValutaTradeError):
 
 
 class AuthenticationError(ValutaTradeError):
-    
+
     def __init__(self, message: str = "Ошибка аутентификации"):
         super().__init__(message)
 
 
 class PortfolioNotFoundError(ValutaTradeError):
-    
+
     def __init__(self, user_id: int):
         self.user_id = user_id
         message = f"Портфель для пользователя {user_id} не найден"
@@ -41,14 +41,14 @@ class PortfolioNotFoundError(ValutaTradeError):
 
 
 class ValidationError(ValutaTradeError):
-    
+
     def __init__(self, field: str, message: str):
         self.field = field
         super().__init__(f"Ошибка валидации поля '{field}': {message}")
 
 
 class RateUnavailableError(ValutaTradeError):
-    
+
     def __init__(self, from_currency: str, to_currency: str):
         self.from_currency = from_currency
         self.to_currency = to_currency

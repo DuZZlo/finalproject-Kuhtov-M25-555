@@ -1,8 +1,7 @@
+import json
 import logging
 import logging.handlers
 import os
-from pathlib import Path
-import json
 from datetime import datetime
 
 from valutatrade_hub.infra.settings import SettingsLoader
@@ -10,13 +9,13 @@ from valutatrade_hub.infra.settings import SettingsLoader
 
 def setup_logging():
     settings = SettingsLoader()
-    
+
     logs_dir = settings.logs_dir
     os.makedirs(logs_dir, exist_ok=True)
-    
+
     log_format = settings.log_format
     log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
-    
+
     if log_format == "json":
         formatter = JsonFormatter()
     else:
@@ -24,11 +23,11 @@ def setup_logging():
             fmt='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
-    
+
     logger = logging.getLogger("valutatrade")
     logger.setLevel(log_level)
     logger.propagate = False
-    
+
     log_file = os.path.join(logs_dir, "actions.log")
     file_handler = logging.handlers.RotatingFileHandler(
         filename=log_file,
@@ -41,19 +40,19 @@ def setup_logging():
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     console_handler.setLevel(logging.WARNING)
-    
+
     logger.handlers.clear()
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
-    
+
     api_logger = logging.getLogger("valutatrade.api")
     api_logger.setLevel(log_level)
-    
+
     return logger
 
 
 class JsonFormatter(logging.Formatter):
-    
+
     def format(self, record):
         log_record = {
             "timestamp": datetime.fromtimestamp(record.created).isoformat(),
@@ -64,7 +63,7 @@ class JsonFormatter(logging.Formatter):
             "function": record.funcName,
             "line": record.lineno,
         }
-        
+
         if hasattr(record, "action"):
             log_record["action"] = record.action
         if hasattr(record, "username"):
@@ -83,10 +82,10 @@ class JsonFormatter(logging.Formatter):
             log_record["error_type"] = record.error_type
         if hasattr(record, "error_message"):
             log_record["error_message"] = record.error_message
-        
+
         if record.exc_info:
             log_record["exception"] = self.formatException(record.exc_info)
-        
+
         return json.dumps(log_record, ensure_ascii=False)
 
 

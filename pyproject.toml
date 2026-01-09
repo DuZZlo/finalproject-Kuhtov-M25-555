@@ -25,7 +25,7 @@ project = "main:main"
 valutatrade = "valutatrade_hub.cli.interface:main"
 
 [tool.ruff]
-line-length = 120
+line-length = 150
 target-version = "py312"
 
 [tool.ruff.lint]
