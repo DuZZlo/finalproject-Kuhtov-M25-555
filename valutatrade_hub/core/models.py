@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Optional
 import time
 from typing import Dict, Optional
+from valutatrade_hub.core.utils import get_exchange_rate, get_available_currencies
 
 class User:
 
@@ -188,17 +189,6 @@ class Wallet:
 
 class Portfolio:
     
-    _exchange_rates: Dict[str, float] = {
-        "USD": 1.0,      
-        "EUR": 1.17,      
-        "GBP": 1.34,     
-        "JPY": 0.0064,   
-        "CNY": 0.14,     
-        "BTC": 89754.0,  
-        "ETH": 3092.65,   
-        "RUB": 0.012,
-    }
-    
     def __init__(self, user_id: int, wallets: Optional[Dict[str, Wallet]] = None):
         self._user_id = user_id
         self._wallets = wallets or {}
@@ -217,15 +207,16 @@ class Portfolio:
     def add_currency(self, currency_code: str, initial_balance: float = 0.0) -> Wallet:
         currency_code = currency_code.upper()
         
-        if currency_code not in self._exchange_rates:
+        # Проверяем, что валюта доступна
+        if not get_exchange_rate(currency_code, "USD"):
             raise ValueError(
                 f"Валюта '{currency_code}' недоступна для торговли. "
-                f"Доступные валюты: {', '.join(self._exchange_rates.keys())}"
+                f"Доступные валюты: {', '.join(get_available_currencies())}"
             )
-
+        
         if currency_code in self._wallets:
             raise ValueError(f"Кошелёк с валютой '{currency_code}' уже существует")
-
+        
         wallet = Wallet(currency_code, initial_balance)
         self._wallets[currency_code] = wallet
         
@@ -238,42 +229,23 @@ class Portfolio:
     
     def get_total_value(self, base_currency: str = "USD") -> float:
         base_currency = base_currency.upper()
-        
-        if base_currency not in self._exchange_rates:
+
+        if not get_exchange_rate(base_currency, "USD"):
             raise ValueError(
                 f"Базовая валюта '{base_currency}' недоступна. "
-                f"Доступные валюты: {', '.join(self._exchange_rates.keys())}"
+                f"Доступные валюты: {', '.join(get_available_currencies())}"
             )
         
         total_value = 0.0
         
         for currency_code, wallet in self._wallets.items():
             if wallet.balance > 0:
-                value_in_base = self._convert_currency(
-                    amount=wallet.balance,
-                    from_currency=currency_code,
-                    to_currency=base_currency
-                )
-                total_value += value_in_base
+                rate = get_exchange_rate(currency_code, base_currency)
+                if rate:
+                    value_in_base = wallet.balance * rate
+                    total_value += value_in_base
         
-        return float(total_value)
-    
-    def _convert_currency(self, amount: float, from_currency: str, to_currency: str) -> float:
-        if from_currency == to_currency:
-            return amount
-        
-        from_rate = self._exchange_rates.get(from_currency)
-        to_rate = self._exchange_rates.get(to_currency)
-        
-        if from_rate is None:
-            raise ValueError(f"Неизвестная валюта: {from_currency}")
-        if to_rate is None:
-            raise ValueError(f"Неизвестная валюта: {to_currency}")
-
-        amount_in_usd = amount * from_rate  # from_currency → USD
-        amount_in_target = amount_in_usd / to_rate  # USD → to_currency
-        
-        return amount_in_target
+        return total_value
     
     def to_dict(self) -> dict:
         wallets_dict = {}
