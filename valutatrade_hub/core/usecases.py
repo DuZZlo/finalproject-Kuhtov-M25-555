@@ -1,7 +1,7 @@
 import hashlib
 import time
-from datetime import datetime, timedelta
-from typing import Dict, Optional, Tuple, Any, List
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 
 from valutatrade_hub.decorators import log_action, retry_on_failure
@@ -19,7 +19,9 @@ from valutatrade_hub.core.exceptions import (
 from valutatrade_hub.core.utils import (
     validate_currency,
     validate_amount,
-    get_exchange_rate
+    get_exchange_rate,
+    is_cache_valid,
+    get_cache_info
 )
 from valutatrade_hub.infra.settings import SettingsLoader
 from valutatrade_hub.infra.database import DatabaseManager
@@ -40,27 +42,17 @@ class SessionManager:
     @classmethod
     def is_logged_in(cls) -> bool:
         return cls._current_user is not None
-
+    
     @classmethod
     def require_login(cls) -> None:
         if not cls.is_logged_in():
             raise AuthenticationError("Сначала выполните команду login")
 
+
 class UserManager:
     
     _db = DatabaseManager()
     _settings = SettingsLoader()
-
-    @staticmethod
-    def get_next_user_id() -> int:
-        users = UserManager._db.read_collection("users")
-        if not users:
-            return 1
-        return max(user["user_id"] for user in users) + 1
-    
-    @staticmethod
-    def find_user_by_username(username: str) -> Optional[dict]:
-        return UserManager._db.find_one("users", {"username": username})
     
     @staticmethod
     @log_action("REGISTER", verbose=True)
@@ -108,22 +100,30 @@ class UserManager:
         
         user = User.from_dict(user_data)
         return True, f"Вы вошли как '{username}'", user
+    
+    @staticmethod
+    def get_next_user_id() -> int:
+        users = UserManager._db.read_collection("users")
+        if not users:
+            return 1
+        return max(user["user_id"] for user in users) + 1
+    
+    @staticmethod
+    def find_user_by_username(username: str) -> Optional[dict]:
+        return UserManager._db.find_one("users", {"username": username})
 
 
 class PortfolioManager:
     
     _db = DatabaseManager()
     _settings = SettingsLoader()
-
+    
     @staticmethod
     def create_portfolio(user_id: int) -> bool:
         portfolio_data = {
             "user_id": user_id,
             "wallets": {}
         }
-        
-        portfolios = load_json("data/portfolios.json")
-        portfolios.append(portfolio_data)
         
         return PortfolioManager._db.insert_one("portfolios", portfolio_data)
     
@@ -146,7 +146,7 @@ class PortfolioManager:
             {"user_id": portfolio.user_id},
             portfolio.to_dict()
         )
-
+    
     @staticmethod
     @log_action("SHOW_PORTFOLIO", verbose=False)
     def show_portfolio(user_id: int, base_currency: str = "USD") -> Tuple[bool, str, Optional[Dict[str, Any]]]:
@@ -156,7 +156,7 @@ class PortfolioManager:
             raise CurrencyNotFoundError(base_currency)
         
         portfolio = PortfolioManager.get_user_portfolio(user_id)
-
+        
         wallets = portfolio.wallets
         
         if not wallets:
@@ -216,10 +216,16 @@ class PortfolioManager:
         message_lines.append("-" * 40)
         message_lines.append(f"ИТОГО: {total_value:,.2f} {base_currency}")
         
+        cache_info = get_cache_info()
+        if not cache_info["is_valid"]:
+            message_lines.append("\nВнимание: данные о курсах могут быть устаревшими.")
+            message_lines.append("Используйте 'update-rates' для обновления курсов.")
+        
         return True, "\n".join(message_lines), {
             "total_value": total_value,
             "wallets": wallet_info,
-            "base_currency": base_currency
+            "base_currency": base_currency,
+            "cache_info": cache_info
         }
 
 
@@ -227,7 +233,7 @@ class TradeManager:
     
     _db = DatabaseManager()
     _settings = SettingsLoader()
-
+    
     @staticmethod
     @log_action("BUY", verbose=True)
     def buy(user_id: int, currency_code: str, amount: float) -> Tuple[bool, str]:
@@ -238,6 +244,11 @@ class TradeManager:
         
         if not validate_amount(amount):
             raise ValidationError("amount", "'amount' должен быть положительным числом")
+        
+        cache_info = get_cache_info()
+        if not cache_info["is_valid"]:
+            print("⚠️  Внимание: данные о курсах могут быть устаревшими.")
+            print("Используйте 'update-rates' для получения актуальных курсов.")
         
         portfolio = PortfolioManager.get_user_portfolio(user_id)
         
@@ -271,6 +282,9 @@ class TradeManager:
                       f"- {currency_code}: было {old_balance:.4f} → стало {target_wallet.balance:.4f}\n"
                       f"Оценочная стоимость покупки: {cost_usd:.2f} USD")
             
+            if cache_info["last_refresh"]:
+                message += f"\nКурс актуален на: {cache_info['last_refresh']}"
+            
             return True, message
             
         except ValueError as e:
@@ -286,6 +300,11 @@ class TradeManager:
         
         if not validate_amount(amount):
             raise ValidationError("amount", "'amount' должен быть положительным числом")
+        
+        cache_info = get_cache_info()
+        if not cache_info["is_valid"]:
+            print("Внимание: данные о курсах могут быть устаревшими.")
+            print("Используйте 'update-rates' для получения актуальных курсов.")
         
         portfolio = PortfolioManager.get_user_portfolio(user_id)
         
@@ -321,100 +340,48 @@ class TradeManager:
                       f"- {currency_code}: было {old_balance:.4f} → стало {source_wallet.balance:.4f}\n"
                       f"Оценочная выручка: {revenue_usd:.2f} USD")
             
+            if cache_info["last_refresh"]:
+                message += f"\nКурс актуален на: {cache_info['last_refresh']}"
+            
             return True, message
             
         except ValueError as e:
             raise ValidationError("operation", str(e))
 
+
 class RateManager:
     
-    _db = DatabaseManager()
-    _settings = SettingsLoader()
-
     @staticmethod
-    @retry_on_failure(max_retries=2, delay=1.0)
-    @log_action("GET_RATE", verbose=False)
     def get_rate(from_currency: str, to_currency: str) -> Tuple[bool, str, Optional[float]]:
-        try:
-            from_currency_obj = CurrencyRegistry.get_currency(from_currency)
-            to_currency_obj = CurrencyRegistry.get_currency(to_currency)
-        except CurrencyNotFoundError as e:
-            raise CurrencyNotFoundError(e.currency_code)
-        
-        rates_data = RateManager._db.read_collection("rates")
-        
-        cache_key = f"{from_currency}_{to_currency}"
-        
-        if (RateManager._settings.enable_rate_cache and 
-            cache_key in rates_data and 
-            "updated_at" in rates_data[cache_key]):
-            
-            try:
-                updated_at = datetime.fromisoformat(rates_data[cache_key]["updated_at"])
-                ttl_seconds = RateManager._settings.rates_ttl_seconds
-                
-                if datetime.now() - updated_at < timedelta(seconds=ttl_seconds):
-                    rate = rates_data[cache_key]["rate"]
-                    message = RateManager._format_rate_message(
-                        from_currency, to_currency, rate, updated_at, from_cache=True
-                    )
-                    return True, message, rate
-            except (ValueError, KeyError):
-                pass
-        
-        try:
-            rate = get_exchange_rate(from_currency, to_currency)
-            if rate is None:
-                raise RateUnavailableError(from_currency, to_currency)
-            
-            rates_data[cache_key] = {
-                "rate": rate,
-                "updated_at": datetime.now().isoformat(),
-                "from_currency": from_currency,
-                "to_currency": to_currency
-            }
-            
-            rates_data["last_refresh"] = datetime.now().isoformat()
-            rates_data["source"] = "stub" if RateManager._settings.fake_api_mode else "api"
-            
-            RateManager._db.write_collection("rates", rates_data)
-            
-            message = RateManager._format_rate_message(
-                from_currency, to_currency, rate, datetime.now(), from_cache=False
-            )
-            
-            return True, message, rate
-            
-        except Exception as e:
-            raise ApiRequestError(
-                reason=str(e),
-                service="ExchangeRateAPI"
-            )
-    
-    @staticmethod
-    def _format_rate_message(from_currency: str, to_currency: str, rate: float, 
-                            timestamp: datetime, from_cache: bool = False) -> str:
         try:
             from_curr = CurrencyRegistry.get_currency(from_currency)
             to_curr = CurrencyRegistry.get_currency(to_currency)
-            from_name = from_curr.name
-            to_name = to_curr.name
-        except CurrencyNotFoundError:
-            from_name = from_currency
-            to_name = to_currency
+        except CurrencyNotFoundError as e:
+            return False, f"Неизвестная валюта: {e.currency_code}", None
         
-        cache_info = " (из кеша)" if from_cache else ""
-        timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        rate = get_exchange_rate(from_currency, to_currency)
         
-        message = (f"Курс {from_currency} ({from_name}) → {to_currency} ({to_name}): {rate:.8f}"
-                  f"{cache_info}\n"
-                  f"Обновлено: {timestamp_str}")
+        if rate is None:
+            return False, f"Курс {from_currency}→{to_currency} недоступен в кеше. Выполните 'update-rates'.", None
+        
+        cache_info = get_cache_info()
+        
+        timestamp = cache_info.get("last_refresh", "неизвестно")
+        source = cache_info.get("source", "кеш")
+        
+        message = f"Курс {from_currency} ({from_curr.name}) → {to_currency} ({to_curr.name}): {rate:.8f}"
+        message += f"\nИсточник: {source}"
+        message += f"\nОбновлено: {timestamp}"
         
         if rate != 0:
             reverse_rate = 1 / rate
             message += f"\nОбратный курс {to_currency} → {from_currency}: {reverse_rate:.8f}"
         
-        return message
+        if not cache_info.get("is_valid", False):
+            message += "\n\nВнимание: данные могут быть устаревшими."
+            message += "\nИспользуйте 'update-rates' для обновления курсов."
+        
+        return True, message, rate
     
     @staticmethod
     def list_supported_currencies() -> str:
@@ -441,5 +408,14 @@ class RateManager:
             result.extend(crypto_currencies)
         
         result.append(f"\nВсего валют: {len(currencies)}")
+        
+        cache_info = get_cache_info()
+        if cache_info["exists"]:
+            result.append(f"\nКурсов в кеше: {cache_info['rates_count']}")
+            result.append(f"Последнее обновление: {cache_info['last_refresh'] or 'никогда'}")
+            if not cache_info["is_valid"]:
+                result.append("Кеш устарел. Используйте 'update-rates'.")
+        else:
+            result.append("\nКеш курсов пуст. Используйте 'update-rates'.")
         
         return "\n".join(result)

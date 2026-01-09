@@ -32,9 +32,6 @@ class SettingsLoader(metaclass=SingletonMeta):
             "log_format": "json",
             "max_log_file_size_mb": 10,
             "max_log_files": 5,
-            "enable_rate_cache": True,
-            "api_timeout_seconds": 10,
-            "fake_api_mode": True,
         }
         
         self._settings = self._default_settings.copy()
@@ -100,14 +97,6 @@ class SettingsLoader(metaclass=SingletonMeta):
     @property
     def log_format(self) -> str:
         return self.get("log_format")
-    
-    @property
-    def enable_rate_cache(self) -> bool:
-        return self.get("enable_rate_cache")
-    
-    @property
-    def fake_api_mode(self) -> bool:
-        return self.get("fake_api_mode")
     
     def get_data_file_path(self, filename: str) -> str:
         data_dir = self.data_dir
