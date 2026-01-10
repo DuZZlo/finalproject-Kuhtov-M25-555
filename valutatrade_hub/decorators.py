@@ -6,21 +6,27 @@ from collections.abc import Callable
 from valutatrade_hub.logging_config import get_logger
 
 
-def log_action(action_name: str | None = None, verbose: bool = False):
+def log_action(action_name: str | None, verbose: bool = False):
     """
-    Декоратор для логирования действий пользователя
+    Декоратор для логирования действий пользователя.
+    Args:
+        action_name: Имя действия (если None, будет использовано имя функции)
+        verbose: Режим подробного логирования
     """
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             logger = get_logger("valutatrade.actions")
 
+            # Определяем имя действия
             action = action_name or func.__name__.upper()
 
+            # Извлекаем информацию о пользователе и параметрах
             user_info = {}
             func_params = {}
 
             try:
+                # Пытаемся извлечь user_id из аргументов
                 sig = inspect.signature(func)
                 bound_args = sig.bind(*args, **kwargs)
                 bound_args.apply_defaults()
@@ -29,62 +35,84 @@ def log_action(action_name: str | None = None, verbose: bool = False):
                     if param_name in ['user_id', 'username', 'currency', 'currency_code', 'amount']:
                         func_params[param_name] = param_value
 
+                # Ищем user_id в разных возможных местах
                 if 'user_id' in func_params:
                     user_info['user_id'] = func_params['user_id']
                 elif 'username' in func_params:
                     user_info['username'] = func_params['username']
 
-                log_params = {
+                # Параметры для логирования
+                log_extra = {
                     'action': action,
                     **user_info,
-                    'currency_code': func_params.get('currency') or func_params.get('currency_code'),
-                    'amount': func_params.get('amount'),
                 }
 
+                # Добавляем только если не None
+                if func_params.get('currency') or func_params.get('currency_code'):
+                    log_extra['currency_code'] = func_params.get('currency') or func_params.get('currency_code')
+
+                if func_params.get('amount') is not None:
+                    log_extra['amount'] = func_params.get('amount')
+
                 if verbose:
-                    log_params['function'] = func.__name__
-                    log_params['module'] = func.__module__
-                    log_params['args'] = str(args)
-                    log_params['kwargs'] = str(kwargs)
+                    # Добавляем дополнительный контекст для verbose режима
+                    log_extra['function_name'] = func.__name__
+                    log_extra['module_name'] = func.__module__
+                    log_extra['args_str'] = str(args)
+                    log_extra['kwargs_str'] = str(kwargs)
 
-                logger.info(f"Начало действия: {action}", extra=log_params)
+                # Логируем начало действия
+                logger.info(f"Начало действия: {action}", extra=log_extra)
 
+                # Засекаем время выполнения
                 start_time = time.time()
 
+                # Выполняем функцию
                 result = func(*args, **kwargs)
 
+                # Рассчитываем время выполнения
                 execution_time = time.time() - start_time
 
-                log_params.update({
+                # Логируем успешное завершение
+                log_extra.update({
                     'result': 'OK',
                     'execution_time_ms': round(execution_time * 1000, 2)
                 })
 
+                # Добавляем результат, если это кортеж с успехом
                 if isinstance(result, tuple) and len(result) >= 1:
                     success = result[0]
                     if isinstance(success, bool):
-                        log_params['result'] = 'OK' if success else 'ERROR'
+                        log_extra['result'] = 'OK' if success else 'ERROR'
 
                         if len(result) >= 2 and not success:
-                            log_params['error_message'] = str(result[1])
+                            # Есть сообщение об ошибке
+                            log_extra['error_message'] = str(result[1])
 
-                logger.info(f"Завершение действия: {action}", extra=log_params)
+                logger.info(f"Завершение действия: {action}", extra=log_extra)
 
                 return result
 
             except Exception as e:
-                error_log_params = {
+                # Логируем ошибку
+                error_log_extra = {
                     'action': action,
                     **user_info,
-                    'currency_code': func_params.get('currency') or func_params.get('currency_code'),
-                    'amount': func_params.get('amount'),
                     'result': 'ERROR',
                     'error_type': type(e).__name__,
                     'error_message': str(e),
                 }
 
-                logger.error(f"Ошибка в действии {action}: {e}", extra=error_log_params)
+                # Добавляем только если не None
+                if func_params.get('currency') or func_params.get('currency_code'):
+                    error_log_extra['currency_code'] = func_params.get('currency') or func_params.get('currency_code')
 
+                if func_params.get('amount') is not None:
+                    error_log_extra['amount'] = func_params.get('amount')
+
+                logger.error(f"Ошибка в действии {action}: {e}", extra=error_log_extra)
+
+                # Пробрасываем исключение дальше
                 raise
 
         return wrapper

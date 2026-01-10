@@ -1,9 +1,11 @@
 import hashlib
+import json
+import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
-from valutatrade_hub.core.currencies import CurrencyRegistry, FiatCurrency
+from valutatrade_hub.core.currencies import CryptoCurrency, CurrencyRegistry, FiatCurrency
 from valutatrade_hub.core.exceptions import (
     AuthenticationError,
     CurrencyNotFoundError,
@@ -28,36 +30,117 @@ class SessionManager:
     Менеджер сессий для хранения текущего пользователя
     """
     _current_user: User | None = None
+    _settings = SettingsLoader()
 
     @classmethod
     def get_current_user(cls) -> User | None:
-        """
-        Возвращает текущего пользователя
-        """
+        """Возвращает текущего пользователя, загружая из файла при необходимости."""
+        if cls._current_user is None:
+            cls._load_session_from_file()
         return cls._current_user
 
     @classmethod
     def set_current_user(cls, user: User | None) -> None:
-        """
-        Устанавливает текущего пользователя
-        """
+        """Устанавливает текущего пользователя и сохраняет сессию."""
         cls._current_user = user
+        cls._save_session_to_file(user)
 
     @classmethod
     def is_logged_in(cls) -> bool:
-        """
-        Проверяет, залогинен ли пользователь
-        """
-        return cls._current_user is not None
+        """Проверяет, залогинен ли пользователь."""
+        return cls.get_current_user() is not None
 
     @classmethod
     def require_login(cls) -> None:
-        """
-        Проверяет авторизацию, выбрасывает исключение если не залогинен
-        """
+        """Проверяет авторизацию, выбрасывает исключение если не залогинен."""
         if not cls.is_logged_in():
             raise AuthenticationError("Сначала выполните команду login")
 
+    @classmethod
+    def _get_session_file_path(cls) -> str:
+        """Возвращает путь к файлу сессии."""
+        return cls._settings.get_data_file_path("session.json")
+
+    @classmethod
+    def _load_session_from_file(cls) -> None:
+        """Загружает сессию из файла."""
+        session_file = cls._get_session_file_path()
+
+        try:
+            if os.path.exists(session_file):
+                with open(session_file, encoding='utf-8') as f:
+                    session_data = json.load(f)
+
+                # Проверяем срок действия сессии (24 часа)
+                if "expires_at" in session_data:
+                    expires_at = datetime.fromisoformat(session_data["expires_at"])
+                    if datetime.now() > expires_at:
+                        # Сессия истекла
+                        cls._clear_session_file()
+                        return
+
+                # Восстанавливаем пользователя из сессии
+                if "user_id" in session_data and "username" in session_data:
+                    # Создаем минимальный объект User для сессии
+                    cls._current_user = User(
+                        user_id=session_data["user_id"],
+                        username=session_data["username"],
+                        hashed_password="",  # Пароль не храним в сессии
+                        salt="",
+                        registration_date=datetime.fromisoformat(
+                            session_data.get("registration_date", datetime.now().isoformat())
+                        )
+                    )
+
+        except (OSError, json.JSONDecodeError, ValueError, KeyError) as e:
+            # Если файл поврежден, очищаем его
+            print(f"Warning: Session file corrupted: {e}")
+            cls._clear_session_file()
+
+    @classmethod
+    def _save_session_to_file(cls, user: User | None) -> None:
+        """Сохраняет сессию в файл."""
+        session_file = cls._get_session_file_path()
+
+        try:
+            if user is None:
+                # Выход из системы - удаляем файл сессии
+                cls._clear_session_file()
+                return
+
+            # Создаем данные сессии
+            session_data = {
+                "user_id": user.user_id,
+                "username": user.username,
+                "registration_date": user.registration_date.isoformat(),
+                "expires_at": (datetime.now() + timedelta(hours=24)).isoformat(),  # 24 часа
+                "created_at": datetime.now().isoformat()
+            }
+
+            # Сохраняем в файл
+            os.makedirs(os.path.dirname(session_file), exist_ok=True)
+            with open(session_file, 'w', encoding='utf-8') as f:
+                json.dump(session_data, f, indent=2, ensure_ascii=False)
+
+        except (OSError, TypeError) as e:
+            print(f"Error saving session: {e}")
+
+    @classmethod
+    def _clear_session_file(cls) -> None:
+        """Очищает файл сессии."""
+        session_file = cls._get_session_file_path()
+        try:
+            if os.path.exists(session_file):
+                os.remove(session_file)
+        except OSError as e:
+            print(f"Error clearing session file: {e}")
+        finally:
+            cls._current_user = None
+
+    @classmethod
+    def logout(cls) -> None:
+        """Выход из системы."""
+        cls._clear_session_file()
 
 class UserManager:
     """
@@ -293,14 +376,14 @@ class TradeManager:
 
         cache_info = get_cache_info()
         if not cache_info["is_valid"]:
-            print("⚠️  Внимание: данные о курсах могут быть устаревшими.")
+            print("Внимание: данные о курсах могут быть устаревшими.")
             print("Используйте 'update-rates' для получения актуальных курсов.")
 
         portfolio = PortfolioManager.get_user_portfolio(user_id)
 
-        rate = get_exchange_rate("USD", currency_code)
+        rate = get_exchange_rate(currency_code, "USD")
         if not rate:
-            raise RateUnavailableError("USD", currency_code)
+            raise RateUnavailableError(currency_code, "USD")
 
         cost_usd = amount * rate
 
@@ -397,11 +480,190 @@ class TradeManager:
         except ValueError as e:
             raise ValidationError("operation", str(e)) from e
 
+    @staticmethod
+    @log_action("DEPOSIT", verbose=True)
+    def deposit(user_id: int, currency: str, amount: float) -> tuple[bool, str]:
+        """
+        Пополняет баланс кошелька.
+
+        Args:
+            user_id: ID пользователя
+            currency: Код валюты
+            amount: Сумма пополнения
+
+        Returns:
+            Кортеж (успех, сообщение)
+
+        Raises:
+            CurrencyNotFoundError: Если валюта неизвестна
+            ValidationError: Если данные невалидны
+        """
+        try:
+            CurrencyRegistry.get_currency(currency)
+        except CurrencyNotFoundError:
+            raise CurrencyNotFoundError(currency) from None
+
+        if not validate_amount(amount):
+            raise ValidationError("amount", "'amount' должен быть положительным числом")
+
+        portfolio = PortfolioManager.get_user_portfolio(user_id)
+
+        try:
+            # Получаем или создаем кошелёк
+            wallet = portfolio.get_wallet(currency)
+            if not wallet:
+                portfolio.add_currency(currency, 0.0)
+                wallet = portfolio.get_wallet(currency)
+
+            old_balance = wallet.balance
+            wallet.deposit(amount)
+
+            # Сохраняем изменения
+            PortfolioManager.save_portfolio(portfolio)
+
+            message = (f"Баланс пополнен: +{amount:.4f} {currency}\n"
+                      f"Кошелёк {currency}: было {old_balance:.4f} → стало {wallet.balance:.4f}")
+
+            return True, message
+
+        except ValueError as e:
+            raise ValidationError("operation", str(e)) from None
+
+    @staticmethod
+    @log_action("WITHDRAW", verbose=True)
+    def withdraw(user_id: int, currency: str, amount: float) -> tuple[bool, str]:
+        """
+        Снимает средства с кошелька.
+        """
+        try:
+            CurrencyRegistry.get_currency(currency)
+        except CurrencyNotFoundError:
+            raise CurrencyNotFoundError(currency) from None
+
+        if not validate_amount(amount):
+            raise ValidationError("amount", "'amount' должен быть положительным числом")
+
+        portfolio = PortfolioManager.get_user_portfolio(user_id)
+
+        wallet = portfolio.get_wallet(currency)
+        if not wallet:
+            raise ValidationError("currency", f"У вас нет кошелька '{currency}'")
+
+        if wallet.balance < amount:
+            raise InsufficientFundsError(currency, wallet.balance, amount)
+
+        try:
+            old_balance = wallet.balance
+            withdrawn = wallet.withdraw(amount)
+
+            # Сохраняем изменения
+            PortfolioManager.save_portfolio(portfolio)
+
+            message = (f"Средства сняты: -{withdrawn:.4f} {currency}\n"
+                      f"Кошелёк {currency}: было {old_balance:.4f} → стало {wallet.balance:.4f}")
+
+            return True, message
+
+        except ValueError as e:
+            raise ValidationError("operation", str(e)) from None
+
+    @staticmethod
+    @log_action("TRANSFER", verbose=True)
+    def transfer(user_id: int, from_currency: str, to_currency: str, amount: float) -> tuple[bool, str]:
+        """
+        Переводит средства между валютами по текущему курсу
+        """
+        # Команда объединяет sell и buy
+        try:
+            # Сначала продаем исходную валюту
+            sell_success, sell_message = TradeManager.sell(user_id, from_currency, amount)
+            if not sell_success:
+                return False, f"Ошибка при продаже: {sell_message}"
+
+            # Затем покупаем целевую валюту на полученные USD
+            return True, (f"Перевод {amount:.4f} {from_currency} → {to_currency}\n"
+                         f"{sell_message}")
+
+        except Exception as e:
+            return False, f"Ошибка при переводе: {e}"
+
+    @staticmethod
+    @log_action("BALANCE", verbose=False)
+    def get_balance(user_id: int, currency: str | None = None) -> tuple[bool, str, dict[str, Any] | None]:
+        """
+        Показывает баланс кошелька или всех кошельков
+        """
+        portfolio = PortfolioManager.get_user_portfolio(user_id)
+
+        if currency:
+            # Показать баланс конкретной валюты
+            currency_upper = currency.upper()
+            wallet = portfolio.get_wallet(currency_upper)
+
+            if not wallet:
+                return False, f"У вас нет кошелька '{currency}'", None
+
+            try:
+                curr = CurrencyRegistry.get_currency(currency_upper)
+                display_name = curr.name
+            except CurrencyNotFoundError:
+                display_name = "Unknown"
+
+            message = (f"Баланс {currency_upper} ({display_name}):\n"
+                      f"  Текущий: {wallet.balance:.4f} {currency_upper}")
+
+            # Добавляем стоимость в USD
+            if currency_upper != "USD":
+                rate = get_exchange_rate(currency_upper, "USD")
+                if rate:
+                    value_usd = wallet.balance * rate
+                    message += f"\n  В USD: {value_usd:.2f} USD (курс: {rate:.4f})"
+
+            return True, message, {
+                "currency": currency_upper,
+                "balance": wallet.balance,
+                "display_name": display_name
+            }
+        else:
+            # Показать все кошельки
+            wallets = portfolio.wallets
+            message_lines = ["Ваши кошельки:"]
+            total_usd = 0.0
+
+            for curr_code, wallet in sorted(wallets.items()):
+                if wallet.balance > 0:
+                    try:
+                        curr = CurrencyRegistry.get_currency(curr_code)
+                        display_name = curr.name
+                    except CurrencyNotFoundError:
+                        display_name = "Unknown"
+
+                    line = f"  {curr_code} ({display_name}): {wallet.balance:.4f}"
+
+                    # Добавляем стоимость в USD
+                    if curr_code == "USD":
+                        # USD уже в USD
+                        value_usd = wallet.balance
+                        total_usd += value_usd
+                    else:
+                        # Конвертируем в USD
+                        rate = get_exchange_rate(curr_code, "USD")
+                        if rate:
+                            value_usd = wallet.balance * rate
+                            total_usd += value_usd
+
+                    message_lines.append(line)
+
+            message_lines.append("-" * 40)
+            message_lines.append(f"Общая стоимость: {total_usd:.2f} USD")
+
+            return True, "\n".join(message_lines), {
+                "total_usd": total_usd,
+                "wallets_count": len([w for w in wallets.values() if w.balance > 0])
+            }
+
 
 class RateManager:
-     """
-     Менеджер курсов, интегрированный с Parser Service
-     """
     @staticmethod
     def get_rate(from_currency: str, to_currency: str) -> tuple[bool, str, float | None]:
         """
@@ -442,17 +704,21 @@ class RateManager:
         """
         Возвращает список поддерживаемых валют
         """
+        CurrencyRegistry.update_from_cache()
         currencies = CurrencyRegistry.get_all_currencies()
 
         fiat_currencies = []
         crypto_currencies = []
+        unknown_currencies = []
 
-        for currency in currencies.values():
+        for code, currency in currencies.items():
             info = currency.get_display_info()
             if isinstance(currency, FiatCurrency):
                 fiat_currencies.append(f"  {info}")
-            else:
+            elif isinstance(currency, CryptoCurrency):
                 crypto_currencies.append(f"  {info}")
+            else:
+                unknown_currencies.append(f"  {code} - {currency.name}")
 
         result = ["Поддерживаемые валюты:"]
 
@@ -463,6 +729,10 @@ class RateManager:
         if crypto_currencies:
             result.append("\nКриптовалюты:")
             result.extend(crypto_currencies)
+
+        if unknown_currencies:
+            result.append("\nПрочие валюты:")
+            result.extend(unknown_currencies)
 
         result.append(f"\nВсего валют: {len(currencies)}")
 

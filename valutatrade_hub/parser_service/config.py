@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -15,9 +15,9 @@ class ParserConfig:
     BASE_CURRENCY: str = "USD"
 
     FIAT_CURRENCIES: tuple[str, ...] = ("EUR", "GBP", "JPY", "CNY", "RUB", "CHF", "CAD", "AUD", "NZD")
-    CRYPTO_CURRENCIES: tuple[str, ...] = ("BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "DOT", "MATIC", "AVAX")
+    CRYPTO_CURRENCIES: tuple[str, ...] = ("BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "DOT", "AVAX")
 
-    CRYPTO_ID_MAP: dict[str, str] = {
+    CRYPTO_ID_MAP: dict[str, str] = field(default_factory=lambda: {
         "BTC": "bitcoin",
         "ETH": "ethereum",
         "SOL": "solana",
@@ -26,9 +26,8 @@ class ParserConfig:
         "ADA": "cardano",
         "DOGE": "dogecoin",
         "DOT": "polkadot",
-        "MATIC": "matic-network",
         "AVAX": "avalanche-2",
-    }
+    })
 
     RATES_FILE_PATH: str = "data/rates.json"
     HISTORY_FILE_PATH: str = "data/exchange_rates.json"

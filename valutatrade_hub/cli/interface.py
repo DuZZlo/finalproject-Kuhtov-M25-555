@@ -237,6 +237,113 @@ class ValutaTradeCLI:
             help="Показать статус парсера курсов"
         )
 
+        _logout_parser = subparsers.add_parser(
+            "logout",
+            help="Выход из системы",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
+
+        _whoami_parser = subparsers.add_parser(
+            "whoami",
+            help="Показать текущего пользователя",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
+
+        # deposit
+        deposit_parser = subparsers.add_parser(
+            "deposit",
+            help="Пополнить баланс кошелька",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
+        deposit_parser.add_argument(
+            "--currency",
+            type=str,
+            default="USD",
+            help="Код валюты для пополнения"
+        )
+        deposit_parser.add_argument(
+            "--amount",
+            type=float,
+            required=True,
+            help="Сумма пополнения"
+        )
+
+        # withdraw
+        withdraw_parser = subparsers.add_parser(
+            "withdraw",
+            help="Снять средства с кошелька",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
+        withdraw_parser.add_argument(
+            "--currency",
+            type=str,
+            default="USD",
+            help="Код валюты для снятия"
+        )
+        withdraw_parser.add_argument(
+            "--amount",
+            type=float,
+            required=True,
+            help="Сумма снятия"
+        )
+
+        # balance
+        balance_parser = subparsers.add_parser(
+            "balance",
+            help="Показать баланс кошелька",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
+        balance_parser.add_argument(
+            "--currency",
+            type=str,
+            help="Код валюты (если не указан - показать все кошельки)"
+        )
+
+        # transfer
+        transfer_parser = subparsers.add_parser(
+            "transfer",
+            help="Перевести средства между валютами",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
+        transfer_parser.add_argument(
+            "--from",
+            dest="from_currency",
+            type=str,
+            required=True,
+            help="Исходная валюта"
+        )
+        transfer_parser.add_argument(
+            "--to",
+            dest="to_currency",
+            type=str,
+            required=True,
+            help="Целевая валюта"
+        )
+        transfer_parser.add_argument(
+            "--amount",
+            type=float,
+            required=True,
+            help="Сумма в исходной валюте"
+        )
+
+        wallet_parser = subparsers.add_parser(
+            "create-wallet",
+            help="Создать новый кошелёк",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
+        wallet_parser.add_argument(
+            "--currency",
+            type=str,
+            required=True,
+            help="Код валюты для кошелька"
+        )
+        wallet_parser.add_argument(
+            "--initial-balance",
+            type=float,
+            default=0.0,
+            help="Начальный баланс"
+        )
+
         return parser
 
     def _check_login(self) -> bool:
@@ -404,6 +511,172 @@ class ValutaTradeCLI:
             print(f"Ошибка: {e}")
             return 1
 
+    def handle_logout(self, args) -> int:
+        """Обрабатывает команду logout."""
+
+        if SessionManager.is_logged_in():
+            SessionManager.logout()
+            print("Вы успешно вышли из системы")
+        else:
+            print("Вы не вошли в систему")
+        return 0
+
+    def handle_whoami(self, args) -> int:
+        """Обрабатывает команду whoami."""
+        user = SessionManager.get_current_user()
+        if user:
+            print(f"Текущий пользователь: {user.username} (id: {user.user_id})")
+            print(f"Зарегистрирован: {user.registration_date.strftime('%Y-%m-%d %H:%M:%S')}")
+        else:
+            print("Вы не вошли в систему. Используйте команду 'login'")
+        return 0
+
+    def handle_deposit(self, args) -> int:
+        """Обрабатывает команду deposit"""
+        if not self._check_login():
+            return 1
+
+        try:
+            user = SessionManager.get_current_user()
+            success, message = TradeManager.deposit(
+                user.user_id,
+                args.currency.upper(),
+                args.amount
+            )
+            print(message)
+            return 0 if success else 1
+        except CurrencyNotFoundError as e:
+            print(f"Ошибка: {e}")
+            print("\nДоступные валюты:")
+            available_codes = CurrencyRegistry.get_all_codes()
+            print("  " + ", ".join(sorted(available_codes)))
+            return 1
+        except ValidationError as e:
+            print(f"Ошибка: {e}")
+            return 1
+        except Exception as e:
+            print(f"Неизвестная ошибка: {e}")
+            return 1
+
+    def handle_withdraw(self, args) -> int:
+        """Обрабатывает команду withdraw."""
+        if not self._check_login():
+            return 1
+
+        try:
+            user = SessionManager.get_current_user()
+            success, message = TradeManager.withdraw(
+                user.user_id,
+                args.currency.upper(),
+                args.amount
+            )
+            print(message)
+            return 0 if success else 1
+        except CurrencyNotFoundError as e:
+            print(f"Ошибка: {e}")
+            print("\nДоступные валюты:")
+            available_codes = CurrencyRegistry.get_all_codes()
+            print("  " + ", ".join(sorted(available_codes)))
+            return 1
+        except ValidationError as e:
+            print(f"Ошибка: {e}")
+            return 1
+        except InsufficientFundsError as e:
+            print(f"Ошибка: {e}")
+            return 1
+        except Exception as e:
+            print(f"Неизвестная ошибка: {e}")
+            return 1
+
+    def handle_balance(self, args) -> int:
+        """Обрабатывает команду balance."""
+        if not self._check_login():
+            return 1
+
+        try:
+            user = SessionManager.get_current_user()
+            currency = args.currency.upper() if args.currency else None
+
+            success, message, _ = TradeManager.get_balance(user.user_id, currency)
+            print(message)
+            return 0 if success else 1
+        except Exception as e:
+            print(f"Ошибка: {e}")
+            return 1
+
+    def handle_transfer(self, args) -> int:
+        """Обрабатывает команду transfer."""
+        if not self._check_login():
+            return 1
+
+        try:
+            user = SessionManager.get_current_user()
+            success, message = TradeManager.transfer(
+                user.user_id,
+                args.from_currency.upper(),
+                args.to_currency.upper(),
+                args.amount
+            )
+            print(message)
+            return 0 if success else 1
+        except CurrencyNotFoundError as e:
+            print(f"Ошибка: {e}")
+            print("\nДоступные валюты:")
+            available_codes = CurrencyRegistry.get_all_codes()
+            print("  " + ", ".join(sorted(available_codes)))
+            return 1
+        except ValidationError as e:
+            print(f"Ошибка: {e}")
+            return 1
+        except InsufficientFundsError as e:
+            print(f"Ошибка: {e}")
+            return 1
+        except Exception as e:
+            print(f"Неизвестная ошибка: {e}")
+            return 1
+
+    def handle_create_wallet(self, args) -> int:
+        """Обрабатывает команду create-wallet."""
+        if not self._check_login():
+            return 1
+
+        try:
+            user = SessionManager.get_current_user()
+            portfolio = PortfolioManager.get_user_portfolio(user.user_id)
+
+            # Проверяем существование валюты
+            try:
+                currency = CurrencyRegistry.get_currency(args.currency.upper())
+            except CurrencyNotFoundError:
+                print(f"Ошибка: неизвестная валюта '{args.currency}'")
+                print("\nИспользуйте 'list-currencies' для просмотра доступных валют.")
+                return 1
+
+            # Проверяем сумму
+            if args.initial_balance < 0:
+                print("Ошибка: начальный баланс не может быть отрицательным")
+                return 1
+
+            # Создаем кошелёк
+            existing_wallet = portfolio.get_wallet(args.currency.upper())
+            if existing_wallet:
+                print(f"Кошелёк {args.currency.upper()} уже существует")
+                print(f"Текущий баланс: {existing_wallet.balance:.4f}")
+                return 1
+
+            portfolio.add_currency(args.currency.upper(), args.initial_balance)
+            PortfolioManager.save_portfolio(portfolio)
+
+            message = (f"✅ Кошелёк {args.currency.upper()} ({currency.name}) создан\n"
+                    f"Начальный баланс: {args.initial_balance:.4f}")
+
+            print(message)
+            return 0
+
+        except Exception as e:
+            print(f"Ошибка: {e}")
+            return 1
+
     def run(self, args=None) -> int:
         """
         Запускает CLI с переданными аргументами
@@ -424,6 +697,13 @@ class ValutaTradeCLI:
                 "start-parser": self.handle_start_parser,
                 "stop-parser": self.handle_stop_parser,
                 "parser-status": self.handle_parser_status,
+                "logout": self.handle_logout,
+                "whoami": self.handle_whoami,
+                "deposit": self.handle_deposit,
+                "withdraw": self.handle_withdraw,
+                "balance": self.handle_balance,
+                "transfer": self.handle_transfer,
+                "create-wallet": self.handle_create_wallet,
             }
 
             handler = handlers.get(parsed_args.command)

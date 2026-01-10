@@ -139,6 +139,9 @@ class ExchangeRateApiClient(BaseApiClient):
     """
     @retry_on_failure(max_retries=2, delay=2.0)
     def fetch_rates(self) -> dict[str, float]:
+        """
+        Получает курсы фиатных валют от ExchangeRate-API.
+        """
         logger.info("Запрос курсов фиатных валют от ExchangeRate-API...")
 
         url = self.config.exchangerate_request_url
@@ -154,26 +157,27 @@ class ExchangeRateApiClient(BaseApiClient):
                 )
 
             rates = {}
-            base_currency = data.get("base_code", self.config.BASE_CURRENCY)
 
-            all_rates = data.get("rates", {})
+            # API возвращает conversion_rates
+            all_rates = data.get("conversion_rates", {})
+            # Или rates
+            if not all_rates:
+                all_rates = data.get("rates", {})
 
             for fiat_currency in self.config.FIAT_CURRENCIES:
                 if fiat_currency in all_rates:
-                    rate = all_rates[fiat_currency]
+                    rate_from_usd = all_rates[fiat_currency]
 
-                    if base_currency != self.config.BASE_CURRENCY:
-                        usd_rate = all_rates.get("USD", 1.0)
-                        rate = rate / usd_rate
+                    if rate_from_usd != 0:
+                        rate_to_usd = 1.0 / rate_from_usd
 
-                    pair_key = f"{fiat_currency}_{self.config.BASE_CURRENCY}"
-                    rates[pair_key] = float(rate)
+                        pair_key = f"{fiat_currency}_USD"
+                        rates[pair_key] = float(rate_to_usd)
 
-            for pair, rate in list(rates.items()):
-                from_curr, to_curr = pair.split("_")
-                if from_curr != to_curr and rate != 0:
-                    reverse_pair = f"{to_curr}_{from_curr}"
-                    rates[reverse_pair] = 1.0 / rate
+                        reverse_pair = f"USD_{fiat_currency}"
+                        rates[reverse_pair] = float(rate_from_usd)
+
+            rates["USD_USD"] = 1.0
 
             if not rates:
                 raise ApiRequestError(

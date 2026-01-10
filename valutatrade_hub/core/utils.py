@@ -9,7 +9,7 @@ from valutatrade_hub.infra.settings import SettingsLoader
 
 def get_exchange_rate(from_currency: str, to_currency: str) -> float | None:
     """
-    Получает курс обмена между валютами из локального кеша
+    Получает курс обмена между валютами из локального кеша.
     """
     from_currency = from_currency.upper()
     to_currency = to_currency.upper()
@@ -40,24 +40,26 @@ def get_exchange_rate(from_currency: str, to_currency: str) -> float | None:
                     if isinstance(rate_info, dict) and "rate" in rate_info:
                         return float(rate_info["rate"])
 
-                reverse_pair = f"{to_currency}_{from_currency}"
-                if reverse_pair in pairs:
-                    rate_info = pairs[reverse_pair]
-                    if isinstance(rate_info, dict) and "rate" in rate_info:
-                        rate = float(rate_info["rate"])
-                        if rate != 0:
-                            return 1.0 / rate
+                from_to_usd = f"{from_currency}_USD"
+                usd_to_to = f"USD_{to_currency}"
 
-                if from_currency != "USD" and to_currency != "USD":
-                    rate_from_usd = get_exchange_rate(from_currency, "USD")
-                    rate_to_usd = get_exchange_rate("USD", to_currency)
+                if from_to_usd in pairs and usd_to_to in pairs:
+                    rate_from_usd = float(pairs[from_to_usd]["rate"])
+                    rate_usd_to = float(pairs[usd_to_to]["rate"])
 
-                    if rate_from_usd and rate_to_usd:
-                        return rate_to_usd / rate_from_usd
+                    return rate_from_usd * rate_usd_to
+
+                to_to_usd = f"{to_currency}_USD"
+                if from_to_usd in pairs and to_to_usd in pairs:
+                    rate_from_usd = float(pairs[from_to_usd]["rate"])
+                    rate_to_usd = float(pairs[to_to_usd]["rate"])
+
+                    if rate_to_usd != 0:
+                        return rate_from_usd / rate_to_usd
 
         return None
 
-    except (OSError, json.JSONDecodeError, ValueError, KeyError) as e:
+    except (OSError, json.JSONDecodeError, ValueError, KeyError, ZeroDivisionError) as e:
         print(f"Warning: Could not load exchange rate from cache: {e}")
         return None
 

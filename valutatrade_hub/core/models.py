@@ -2,8 +2,8 @@ import hashlib
 import time
 from datetime import datetime
 
+from valutatrade_hub.core.currencies import CurrencyNotFoundError, CurrencyRegistry
 from valutatrade_hub.core.exceptions import InsufficientFundsError
-from valutatrade_hub.core.utils import get_available_currencies, get_exchange_rate
 
 
 class User:
@@ -18,9 +18,6 @@ class User:
         salt: str,
         registration_date: datetime | None = None
     ):
-    """
-    Инициализация пользователя
-    """
         self._user_id = user_id
         self._username = username
         self._hashed_password = hashed_password
@@ -163,9 +160,6 @@ class User:
 
 
 class Wallet:
-    """
-    Класс кошелька пользователя для конкретной валюты
-    """
     def __init__(self, currency_code: str, balance: float = 0.0):
         """
         Инициализация кошелька
@@ -302,20 +296,25 @@ class Portfolio:
         """
         currency_code = currency_code.upper()
 
-        # Проверяем, что валюта доступна
-        if not get_exchange_rate(currency_code, "USD"):
+        # Проверяем, что валюта доступна через CurrencyRegistry
+        try:
+            CurrencyRegistry.get_currency(currency_code)
+        except CurrencyNotFoundError:
+            # Получаем список доступных валют
+            available_codes = CurrencyRegistry.get_all_codes()
             raise ValueError(
                 f"Валюта '{currency_code}' недоступна для торговли. "
-                f"Доступные валюты: {', '.join(get_available_currencies())}"
-            )
+                f"Доступные валюты: {', '.join(available_codes)}"
+            ) from None
 
+        # Проверяем уникальность кода валюты
         if currency_code in self._wallets:
             raise ValueError(f"Кошелёк с валютой '{currency_code}' уже существует")
 
+        # Создаём новый кошелёк
         wallet = Wallet(currency_code, initial_balance)
         self._wallets[currency_code] = wallet
 
-        print(f"Добавлен кошелёк {currency_code} с начальным балансом {initial_balance:.2f}")
         return wallet
 
     def get_wallet(self, currency_code: str) -> Wallet | None:
@@ -331,13 +330,20 @@ class Portfolio:
         """
         base_currency = base_currency.upper()
 
-        if not get_exchange_rate(base_currency, "USD"):
+        # Проверяем, что базовая валюта доступна через CurrencyRegistry
+        try:
+            CurrencyRegistry.get_currency(base_currency)
+        except CurrencyNotFoundError:
+            available_codes = CurrencyRegistry.get_all_codes()
             raise ValueError(
                 f"Базовая валюта '{base_currency}' недоступна. "
-                f"Доступные валюты: {', '.join(get_available_currencies())}"
-            )
+                f"Доступные валюты: {', '.join(available_codes)}"
+            ) from None
 
         total_value = 0.0
+
+        # Импортируем здесь, чтобы избежать циклического импорта
+        from valutatrade_hub.core.utils import get_exchange_rate
 
         for currency_code, wallet in self._wallets.items():
             if wallet.balance > 0:
