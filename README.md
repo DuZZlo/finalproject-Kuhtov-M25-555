@@ -169,3 +169,11 @@
     В случае передачи аргументов использовать "--" 
     Пример: make login -- --username xxxx --password xxxx
       или использовать poetry run valutatrade login --username xxxx --password xxxx
+
+    Для просмотра информации о команде: make <команда> -- -h
+
+Демонстрация работы:
+    https://asciinema.org/a/APTHib3gNxkeX8Km
+
+Демонстрация ошибок:
+    https://asciinema.org/a/wsE9n4YZNiWRToYo

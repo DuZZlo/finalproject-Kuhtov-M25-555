@@ -59,6 +59,21 @@ stop-parser:
 parser-status:
 	@poetry run valutatrade parser-status
 
+deposit:
+	@poetry run valutatrade deposit $(filter-out $@,$(MAKECMDGOALS))
+
+withdraw:
+	@poetry run valutatrade withdraw $(filter-out $@,$(MAKECMDGOALS))
+
+balance:
+	@poetry run valutatrade balance
+
+transfer:
+	@poetry run valutatrade transfer $(filter-out $@,$(MAKECMDGOALS))
+
+create-wallet:
+	@poetry run valutatrade create-wallet $(filter-out $@,$(MAKECMDGOALS))
+
 # Помощь по алиасам
 aliases:
 	@echo "Доступные короткие команды:"
@@ -77,5 +92,10 @@ aliases:
 	@echo "  make start-parser        - Запустить парсер"
 	@echo "  make stop-parser         - Остановить парсер"
 	@echo "  make parser-status       - Статус парсера"
+	@echo "  make deposit		      - Пополнить баланс"
+	@echo "  make withdraw		      - Вывод средств"
+	@echo "  make balance		      - Просмотр баланса"
+	@echo "  make transfer		      - Перевод средств между кошельками"
+	@echo "  make create-wallet		  - Создать кошелек"
 
 .NOTPARALLEL:
