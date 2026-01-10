@@ -2,16 +2,7 @@ import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-
-class CurrencyNotFoundError(Exception):
-    """
-    Исключение для неизвестной валюты
-    """
-    def __init__(self, currency_code: str):
-        self.currency_code = currency_code
-        message = f"Неизвестная валюта '{currency_code}'"
-        super().__init__(message)
-    pass
+from valutatrade_hub.core.exceptions import CurrencyNotFoundError
 
 
 class Currency(ABC):
@@ -212,43 +203,12 @@ class CurrencyRegistry:
         if code_upper in cls._currencies:
             return cls._currencies[code_upper]
 
-        # Пытаемся определить тип валюты и создать её динамически
-        try:
-            # Проверяем, есть ли эта валюта в кэше курсов
-            from valutatrade_hub.core.utils import get_exchange_rate
-            rate = get_exchange_rate(code_upper, "USD")
-
-            if rate is not None:
-                # Валюта есть в кэше курсов, создаём её динамически
-                if len(code_upper) == 3 and code_upper.isalpha():
-                    # Скорее всего фиатная валюта (3 буквы)
-                    currency = FiatCurrency(
-                        name=f"Currency {code_upper}",  # Временное имя
-                        code=code_upper,
-                        issuing_country="Unknown"
-                    )
-                else:
-                    # Скорее всего криптовалюта
-                    currency = CryptoCurrency(
-                        name=f"Crypto {code_upper}",  # Временное имя
-                        code=code_upper,
-                        algorithm="Unknown",
-                        market_cap=0.0
-                    )
-
-                # Сохраняем в реестр
-                cls._currencies[code_upper] = currency
-                return currency
-
-        except ImportError:
-            pass
-
-        # Если не смогли создать динамически, пробуем загрузить из конфигурации Parser Service
+            # Пытаемся создать валюту без проверки кэша курсов
         try:
             from valutatrade_hub.parser_service.config import ParserConfig
             config = ParserConfig()
 
-            # Проверяем фиатные валюты
+            # Проверяем фиатные валюты из конфига
             if code_upper in config.FIAT_CURRENCIES:
                 currency = FiatCurrency(
                     name=f"Currency {code_upper}",
@@ -258,7 +218,7 @@ class CurrencyRegistry:
                 cls._currencies[code_upper] = currency
                 return currency
 
-            # Проверяем криптовалюты
+            # Проверяем криптовалюты из конфига
             if code_upper in config.CRYPTO_CURRENCIES:
                 currency = CryptoCurrency(
                     name=f"Crypto {code_upper}",
@@ -272,13 +232,21 @@ class CurrencyRegistry:
         except ImportError:
             pass
 
-        # Если всё ещё не нашли, создаём как Unknown валюту, чтобы не падать при обработке портфелей
-        currency = Currency(
-            name=f"Unknown Currency {code_upper}",
-            code=code_upper
-        )
-        cls._currencies[code_upper] = currency
-        return currency
+        # Если не нашли в конфиге, проверяем в известных списках
+        if code_upper in cls._KNOWN_FIAT:
+            name, country = cls._KNOWN_FIAT[code_upper]
+            currency = FiatCurrency(name, code_upper, country)
+            cls._currencies[code_upper] = currency
+            return currency
+
+        if code_upper in cls._KNOWN_CRYPTO:
+            name, algorithm = cls._KNOWN_CRYPTO[code_upper]
+            currency = CryptoCurrency(name, code_upper, algorithm)
+            cls._currencies[code_upper] = currency
+            return currency
+
+        # Если всё ещё не нашли, бросаем исключение
+        raise CurrencyNotFoundError(code_upper)
 
     @classmethod
     def get_all_currencies(cls) -> dict[str, Currency]:

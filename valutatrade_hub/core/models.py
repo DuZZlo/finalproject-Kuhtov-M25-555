@@ -2,8 +2,8 @@ import hashlib
 import time
 from datetime import datetime
 
-from valutatrade_hub.core.currencies import CurrencyNotFoundError, CurrencyRegistry
-from valutatrade_hub.core.exceptions import InsufficientFundsError
+from valutatrade_hub.core.currencies import CurrencyRegistry
+from valutatrade_hub.core.exceptions import CurrencyNotFoundError, InsufficientFundsError
 
 
 class User:

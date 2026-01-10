@@ -3,7 +3,8 @@ import os
 from datetime import datetime
 from typing import Any
 
-from valutatrade_hub.core.currencies import CurrencyNotFoundError, CurrencyRegistry
+from valutatrade_hub.core.currencies import CurrencyRegistry
+from valutatrade_hub.core.exceptions import CurrencyNotFoundError
 from valutatrade_hub.infra.settings import SettingsLoader
 
 
